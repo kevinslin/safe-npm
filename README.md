@@ -32,3 +32,4 @@ safe-npm install react@^18 lodash --min-age-days 120
 - Ignored packages still resolve to the newest version that matches their semver range.
 - When run without package arguments, `safe-npm` reads dependencies from `package.json` in the current working directory.
 - The overrides strategy updates `package.json` to enforce the resolved versions across the dependency graph.
+- For automated testing you can set the `SAFE_NPM_FIXTURES` environment variable to a JSON file that mirrors npm registry responses; the CLI will use those fixtures instead of hitting the network.

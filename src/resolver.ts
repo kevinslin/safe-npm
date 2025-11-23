@@ -1,4 +1,5 @@
 import axios from "axios";
+import fs from "fs";
 import semver from "semver";
 
 export interface ResolveOptions {
@@ -35,15 +36,39 @@ function normalizeRange(range: string | undefined, distTags: Record<string, stri
   throw new Error(`Unsupported version range: ${range}`);
 }
 
+let fixtureCache: Record<string, any> | null = null;
+let fixturePathLoaded: string | null = null;
+
+function loadFixtures(): Record<string, any> | null {
+  const fixturePath = process.env.SAFE_NPM_FIXTURES;
+  if (!fixturePath) {
+    fixtureCache = null;
+    fixturePathLoaded = null;
+    return null;
+  }
+
+  if (fixtureCache && fixturePathLoaded === fixturePath) {
+    return fixtureCache;
+  }
+
+  const content = fs.readFileSync(fixturePath, "utf8");
+  fixtureCache = JSON.parse(content);
+  fixturePathLoaded = fixturePath;
+  return fixtureCache;
+}
+
 export async function resolveSafeVersion(options: ResolveOptions): Promise<string | null> {
   const { name, range, registry, cutoffDate, ignoreAge } = options;
-  const url = `${normalizeRegistry(registry)}/${encodeURIComponent(name)}`;
+  const fixtures = loadFixtures();
 
-  const response = await axios.get(url, { timeout: 10_000 });
-  const data = response.data as any;
-
-  if (!data || typeof data !== "object") {
-    throw new Error("Invalid registry response");
+  let data: any;
+  if (fixtures) {
+    data = fixtures[name];
+    if (!data) {
+      throw new Error(`Package "${name}" not found in SAFE_NPM_FIXTURES`);
+    }
+  } else {
+    data = await fetchPackageFromRegistry(name, registry);
   }
 
   const times: Record<string, string> = data.time ?? {};
@@ -71,4 +96,16 @@ export async function resolveSafeVersion(options: ResolveOptions): Promise<strin
   }
 
   return candidates[0];
+}
+
+async function fetchPackageFromRegistry(name: string, registry: string): Promise<any> {
+  const url = `${normalizeRegistry(registry)}/${encodeURIComponent(name)}`;
+  const response = await axios.get(url, { timeout: 10_000 });
+  const data = response.data as any;
+
+  if (!data || typeof data !== "object") {
+    throw new Error("Invalid registry response");
+  }
+
+  return data;
 }
